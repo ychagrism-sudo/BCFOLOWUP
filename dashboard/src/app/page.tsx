@@ -36,24 +36,24 @@ interface APIResponse {
 
 // Color palette
 const COLORS = {
-  accent: '#6366f1',
-  success: '#10b981',
-  warning: '#f59e0b',
-  danger: '#ef4444',
-  info: '#3b82f6',
-  purple: '#a855f7',
-  cyan: '#06b6d4',
-  pink: '#ec4899',
+  accent: '#5b5fc7',
+  success: '#2ea043',
+  warning: '#cf8b17',
+  danger: '#cf3030',
+  info: '#3d7dd9',
+  purple: '#8b7ec8',
+  cyan: '#3d9dc4',
+  pink: '#b05a8a',
 }
 
-const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#a855f7', '#06b6d4', '#ec4899', '#f97316', '#14b8a6']
+const PIE_COLORS = ['#5b5fc7', '#2ea043', '#cf8b17', '#cf3030', '#3d7dd9', '#8b7ec8', '#3d9dc4', '#b05a8a', '#c07030', '#2a8a6a']
 
 // Country config with flags and accent colors
 const COUNTRY_CONFIG = [
-  { key: 'Maroc', flag: '🇲🇦', color: '#ef4444', gradient: 'linear-gradient(135deg, #dc2626, #ef4444)' },
-  { key: 'Tunis', flag: '🇹🇳', color: '#3b82f6', gradient: 'linear-gradient(135deg, #2563eb, #3b82f6)' },
-  { key: 'France', flag: '🇫🇷', color: '#6366f1', gradient: 'linear-gradient(135deg, #4f46e5, #6366f1)' },
-  { key: 'Madagascar', flag: '🇲🇬', color: '#10b981', gradient: 'linear-gradient(135deg, #059669, #10b981)' },
+  { key: 'Maroc', flag: '🇲🇦', color: '#b03030', gradient: 'linear-gradient(135deg, #8b2020, #b03030)' },
+  { key: 'Tunis', flag: '🇹🇳', color: '#2e6ab0', gradient: 'linear-gradient(135deg, #1e4a80, #2e6ab0)' },
+  { key: 'France', flag: '🇫🇷', color: '#4a4e9e', gradient: 'linear-gradient(135deg, #363a7a, #4a4e9e)' },
+  { key: 'Madagascar', flag: '🇲🇬', color: '#1e7a4a', gradient: 'linear-gradient(135deg, #145a35, #1e7a4a)' },
 ]
 
 function computeCountryKpis(rows: SheetRow[]) {
@@ -409,7 +409,7 @@ export default function DashboardPage() {
     if (active && payload && payload.length) {
       return (
         <div style={{
-          background: '#1a2236',
+          background: '#111116',
           border: '1px solid rgba(255,255,255,0.1)',
           borderRadius: '8px',
           padding: '8px 12px',
@@ -438,11 +438,18 @@ export default function DashboardPage() {
 
   return (
     <div className="dashboard-container">
+      {/* Background watermarks */}
+      <div className="bg-watermark bg-watermark-left" />
+      <div className="bg-watermark bg-watermark-right" />
+
       {/* Header */}
       <header className="header animate-in">
         <div className="header-left">
-          <h1>BC Follow-Up Dashboard</h1>
-          <p>Suivi opérationnel des Business Cases · Google Sheets Live</p>
+          <img src="/Outsourcia Full.svg" alt="Outsourcia" className="header-logo" />
+          <div>
+            <h1>BC Follow-Up Dashboard</h1>
+            <p>Suivi opérationnel des Business Cases</p>
+          </div>
         </div>
         <div className="header-right">
           <div className="live-indicator">
@@ -465,7 +472,7 @@ export default function DashboardPage() {
               <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
               <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
             </svg>
-            {copied ? '✅ Copié !' : '📧 Copier Rapport'}
+            {copied ? 'Copié !' : 'Copier Rapport'}
           </button>
           {lastUpdated && (
             <span className="last-updated">
@@ -478,7 +485,7 @@ export default function DashboardPage() {
       {/* Error banner */}
       {error && (
         <div className="error-banner animate-in">
-          ⚠️ {error} — Les données affichées peuvent être obsolètes.
+          {error} — Les données affichées peuvent être obsolètes.
         </div>
       )}
 
@@ -591,7 +598,7 @@ export default function DashboardPage() {
               <YAxis stroke="#64748b" fontSize={11} domain={[0, 100]} />
               <Tooltip
                 contentStyle={{
-                  background: '#1a2236',
+                  background: '#111116',
                   border: '1px solid rgba(255,255,255,0.1)',
                   borderRadius: '8px',
                   fontSize: '0.75rem',
@@ -631,7 +638,7 @@ export default function DashboardPage() {
               endAngle={-180}
             >
               <RadialBar
-                background={{ fill: '#1a2236' } as any}
+                background={{ fill: '#18181f' } as any}
                 dataKey="value"
                 cornerRadius={8}
               />
@@ -646,7 +653,7 @@ export default function DashboardPage() {
               />
               <Tooltip
                 contentStyle={{
-                  background: '#1a2236',
+                  background: '#111116',
                   border: '1px solid rgba(255,255,255,0.1)',
                   borderRadius: '8px',
                   fontSize: '0.75rem',
@@ -678,7 +685,7 @@ export default function DashboardPage() {
               </Pie>
               <Tooltip
                 contentStyle={{
-                  background: '#1a2236',
+                  background: '#111116',
                   border: '1px solid rgba(255,255,255,0.1)',
                   borderRadius: '8px',
                   fontSize: '0.75rem',
@@ -731,7 +738,7 @@ export default function DashboardPage() {
         <input
           className="search-input"
           type="text"
-          placeholder="🔍  Rechercher un client, pays, RC..."
+          placeholder="Rechercher un client, pays, RC..."
           value={searchQuery}
           onChange={e => setSearchQuery(e.target.value)}
         />
@@ -807,14 +814,14 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Footer */}
       <footer style={{
         textAlign: 'center',
-        padding: '32px 0 16px',
-        color: '#64748b',
-        fontSize: '0.7rem'
+        padding: '24px 0 12px',
+        color: '#55556a',
+        fontSize: '0.65rem',
+        letterSpacing: '0.02em'
       }}>
-        BC Follow-Up Dashboard · Auto-refresh toutes les 30s · Données depuis Google Sheets
+        BC Follow-Up Dashboard · Actualisation auto. 30s · Source: Google Sheets
       </footer>
     </div>
   )
