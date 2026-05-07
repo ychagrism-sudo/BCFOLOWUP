@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Tracking Dashboard</title>
+    <!-- Tailwind CSS for Styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- SheetJS for Excel Ingestion -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <!-- Chart.js for KPI Dashboards -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { background-color: #f3f4f6; }
+        .hidden { display: none !important; }
+    </style>
+</head>
+<body class="p-8 font-sans text-gray-800">
+
+    <div class="max-w-7xl mx-auto">
+        <!-- Header & Upload Section -->
+        <div class="bg-white p-6 rounded-lg shadow-md mb-8 flex justify-between items-center">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">Client Tracking Dashboard</h1>
+                <p class="text-sm text-gray-500">Upload your Excel tracking file to generate insights.</p>
+            </div>
+            <div>
+                <label class="block mb-2 text-sm font-medium text-gray-900" for="file_input">Upload Excel File</label>
+                <input class="block w-full text-sm text-gray-900 border border-gray-300 rounded-lg cursor-pointer bg-gray-50 focus:outline-none" 
+                       id="file_input" type="file" accept=".xlsx, .xls, .csv">
+            </div>
+        </div>
+
+        <!-- Dashboard Wrapper (Hidden until data is loaded) -->
+        <div id="dashboard_wrapper" class="hidden">
+            
+            <!-- KPI Section -->
+            <h2 class="text-xl font-bold mb-4">Key Performance Indicators (Completion)</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                
+                <!-- KPI: Archivage -->
+                <div class="bg-white p-6 rounded-lg shadow-md flex flex-col items-center">
+                    <h3 class="text-lg font-semibold mb-2 text-center">Archivage Instance</h3>
+                    <p class="text-xs text-gray-500 mb-4 text-center">(Contrat, Reporting, Coprod, Costrat)</p>
+                    <div class="relative w-32 h-32">
+                        <canvas id="chart_archivage"></canvas>
+                    </div>
+                    <p id="kpi_archivage_text" class="mt-4 font-bold text-blue-600 text-xl">0%</p>
+                </div>
+
+                <!-- KPI: Business Case -->
+                <div class="bg-white p-6 rounded-lg shadow-md flex flex-col items-center">
+                    <h3 class="text-lg font-semibold mb-2 text-center">Business Case</h3>
+                    <p class="text-xs text-gray-500 mb-4 text-center">Status: Complet</p>
+                    <div class="relative w-32 h-32">
+                        <canvas id="chart_bc"></canvas>
+                    </div>
+                    <p id="kpi_bc_text" class="mt-4 font-bold text-green-600 text-xl">0%</p>
+                </div>
+
+                <!-- KPI: Update Notion -->
+                <div class="bg-white p-6 rounded-lg shadow-md flex flex-col items-center">
+                    <h3 class="text-lg font-semibold mb-2 text-center">Update Notion</h3>
+                    <p class="text-xs text-gray-500 mb-4 text-center">Status: Complet</p>
+                    <div class="relative w-32 h-32">
+                        <canvas id="chart_notion"></canvas>
+                    </div>
+                    <p id="kpi_notion_text" class="mt-4 font-bold text-purple-600 text-xl">0%</p>
+                </div>
+            </div>
+
+            <!-- Data Hierarchy Viewer -->
+            <h2 class="text-xl font-bold mb-4">Data Explorer (Country > RC > ROA > Client)</h2>
+            <div class="bg-white p-6 rounded-lg shadow-md overflow-x-auto">
+                <div class="flex gap-4 mb-4">
+                    <select id="filter_country" class="border p-2 rounded"><option value="all">All Countries</option></select>
+                    <select id="filter_rc" class="border p-2 rounded"><option value="all">All RCs</option></select>
+                    <select id="filter_roa" class="border p-2 rounded"><option value="all">All ROAs</option></select>
+                </div>
+                
+                <table class="w-full text-sm text-left text-gray-500">
+                    <thead class="text-xs text-gray-700 uppercase bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3">Hierarchy Path</th>
+                            <th class="px-6 py-3">Client</th>
+                            <th class="px-6 py-3">Archivage Status</th>
+                            <th class="px-6 py-3">Business Case</th>
+                            <th class="px-6 py-3">Update Notion</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table_body">
+                        <!-- Rows will be populated by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let rawData = [];
+        let charts = {};
+
+        // Listen for file upload
+        document.getElementById('file_input').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                
+                // Convert to JSON
+                rawData = XLSX.utils.sheet_to_json(worksheet, {defval: "Non créé"});
+                processData();
+            };
+            reader.readAsArrayBuffer(file);
+        });
+
+        function processData() {
+            document.getElementById('dashboard_wrapper').classList.remove('hidden');
+
+            let totalClients = rawData.length;
+            let archivageCompletCount = 0;
+            let bcCompletCount = 0;
+            let notionCompletCount = 0;
+
+            // Normalize and evaluate rows
+            rawData.forEach(row => {
+                // Determine Archivage Instance completion
+                // Rules: Must have CONTRAT, REPORTINGS 2025, COPROD/COPIL, COSTRAT all "Complet"
+                const isContrat = (row['CONTRAT'] || '').trim().toLowerCase() === 'complet';
+                const isReporting = (row['REPORTINGS 2025'] || '').trim().toLowerCase() === 'complet';
+                const isCoprod = (row['COPROD/COPIL'] || '').trim().toLowerCase() === 'complet';
+                const isCostrat = (row['COSTRAT'] || '').trim().toLowerCase() === 'complet';
+                
+                row._archivage_status = (isContrat && isReporting && isCoprod && isCostrat) ? 'Complet' : 'Incomplet';
+                if (row._archivage_status === 'Complet') archivageCompletCount++;
+
+                // Track BC and Notion
+                if ((row['Business Case'] || '').trim().toLowerCase() === 'complet') bcCompletCount++;
+                if ((row['UPDATE NOTION'] || '').trim().toLowerCase() === 'complet') notionCompletCount++;
+            });
+
+            // Calculate Percentages
+            const archivagePct = totalClients ? Math.round((archivageCompletCount / totalClients) * 100) : 0;
+            const bcPct = totalClients ? Math.round((bcCompletCount / totalClients) * 100) : 0;
+            const notionPct = totalClients ? Math.round((notionCompletCount / totalClients) * 100) : 0;
+
+            document.getElementById('kpi_archivage_text').innerText = `${archivagePct}%`;
+            document.getElementById('kpi_bc_text').innerText = `${bcPct}%`;
+            document.getElementById('kpi_notion_text').innerText = `${notionPct}%`;
+
+            // Draw Charts
+            drawChart('chart_archivage', archivagePct, '#3b82f6'); // Blue
+            drawChart('chart_bc', bcPct, '#22c55e'); // Green
+            drawChart('chart_notion', notionPct, '#a855f7'); // Purple
+
+            populateFilters();
+            renderTable();
+        }
+
+        function drawChart(canvasId, percentage, color) {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            
+            // Destroy existing chart if recreating
+            if(charts[canvasId]) { charts[canvasId].destroy(); }
+
+            charts[canvasId] = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    datasets: [{
+                        data: [percentage, 100 - percentage],
+                        backgroundColor: [color, '#e5e7eb'],
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    cutout: '75%',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: { animateScale: true }
+                }
+            });
+        }
+
+        function populateFilters() {
+            const countries = [...new Set(rawData.map(r => r.Country || 'Unknown'))].sort();
+            const rcs = [...new Set(rawData.map(r => r.RC || 'Unknown'))].sort();
+            const roas = [...new Set(rawData.map(r => r.ROA || 'Unknown'))].sort();
+
+            const createOptions = (arr, selectId) => {
+                const el = document.getElementById(selectId);
+                el.innerHTML = `<option value="all">All ${selectId.split('_')[1].toUpperCase()}s</option>`;
+                arr.forEach(val => el.innerHTML += `<option value="${val}">${val}</option>`);
+                el.addEventListener('change', renderTable);
+            };
+
+            createOptions(countries, 'filter_country');
+            createOptions(rcs, 'filter_rc');
+            createOptions(roas, 'filter_roa');
+        }
+
+        function renderTable() {
+            const countryFilter = document.getElementById('filter_country').value;
+            const rcFilter = document.getElementById('filter_rc').value;
+            const roaFilter = document.getElementById('filter_roa').value;
+            const tbody = document.getElementById('table_body');
+            
+            tbody.innerHTML = '';
+
+            let filteredData = rawData.filter(row => {
+                return (countryFilter === 'all' || row.Country === countryFilter) &&
+                       (rcFilter === 'all' || row.RC === rcFilter) &&
+                       (roaFilter === 'all' || row.ROA === roaFilter);
+            });
+
+            filteredData.forEach(row => {
+                const path = `${row.Country || 'N/A'} > ${row.RC || 'N/A'} > ${row.ROA || 'N/A'}`;
+                
+                const tr = document.createElement('tr');
+                tr.className = "bg-white border-b hover:bg-gray-50";
+                
+                const getBadgeColor = (status) => {
+                    const s = (status || '').toLowerCase();
+                    if(s === 'complet') return 'bg-green-100 text-green-800';
+                    if(s === 'incomplet') return 'bg-yellow-100 text-yellow-800';
+                    return 'bg-gray-100 text-gray-800';
+                };
+
+                tr.innerHTML = `
+                    <td class="px-6 py-4 text-xs font-mono text-gray-400">${path}</td>
+                    <td class="px-6 py-4 font-bold text-gray-900">${row.CLIENT || 'Unknown'}</td>
+                    <td class="px-6 py-4">
+                        <span class="px-2 py-1 rounded text-xs font-medium ${getBadgeColor(row._archivage_status)}">
+                            ${row._archivage_status}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="px-2 py-1 rounded text-xs font-medium ${getBadgeColor(row['Business Case'])}">
+                            ${row['Business Case'] || 'Non créé'}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4">
+                        <span class="px-2 py-1 rounded text-xs font-medium ${getBadgeColor(row['UPDATE NOTION'])}">
+                            ${row['UPDATE NOTION'] || 'Non créé'}
+                        </span>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+    </script>
+</body>
+</html>
