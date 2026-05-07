@@ -1,0 +1,11 @@
+[build]
+  base = "dashboard/"
+  command = "npm install && npm run build"
+  publish = "dashboard/.next"
+
+[build.environment]
+  NODE_VERSION = "18"
+  NEXT_PRIVATE_TARGET = "server"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
