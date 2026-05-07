@@ -95,13 +95,16 @@ function doGet(e) {
  * Triggered on edit — optionally sends a webhook to the dashboard
  */
 function onSheetEdit(e) {
-  // Only react to edits on the "repo" sheet
-  var sheet = e.source.getActiveSheet();
-  if (sheet.getName() !== SHEET_NAME) return;
-  
-  // Log the edit
-  Logger.log("Sheet edited at: " + new Date().toISOString());
-  Logger.log("Range: " + e.range.getA1Notation());
+  // Guard: if run manually from the editor, e is undefined
+  if (!e || !e.source) {
+    Logger.log("Manual run detected — sending webhook directly.");
+  } else {
+    // Only react to edits on the "repo" sheet
+    var sheet = e.source.getActiveSheet();
+    if (sheet.getName() !== SHEET_NAME) return;
+    Logger.log("Sheet edited at: " + new Date().toISOString());
+    Logger.log("Range: " + e.range.getA1Notation());
+  }
   
   // Send webhook notification if URL is configured
   if (DASHBOARD_WEBHOOK_URL) {

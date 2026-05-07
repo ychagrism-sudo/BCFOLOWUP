@@ -48,6 +48,37 @@ const COLORS = {
 
 const PIE_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#3b82f6', '#a855f7', '#06b6d4', '#ec4899', '#f97316', '#14b8a6']
 
+// Country config with flags and accent colors
+const COUNTRY_CONFIG = [
+  { key: 'Maroc', flag: '🇲🇦', color: '#ef4444', gradient: 'linear-gradient(135deg, #dc2626, #ef4444)' },
+  { key: 'Tunis', flag: '🇹🇳', color: '#3b82f6', gradient: 'linear-gradient(135deg, #2563eb, #3b82f6)' },
+  { key: 'France', flag: '🇫🇷', color: '#6366f1', gradient: 'linear-gradient(135deg, #4f46e5, #6366f1)' },
+  { key: 'Madagascar', flag: '🇲🇬', color: '#10b981', gradient: 'linear-gradient(135deg, #059669, #10b981)' },
+]
+
+function computeCountryKpis(rows: SheetRow[]) {
+  const total = rows.length
+  if (total === 0) return { total: 0, bcPct: 0, notionPct: 0, archivagePct: 0, contratPct: 0, reportingPct: 0, coprodPct: 0, costratPct: 0 }
+  const is = (val: string) => val?.trim().toLowerCase() === 'complet'
+  const bc = rows.filter(r => is(r['Business Case'])).length
+  const notion = rows.filter(r => is(r['UPDATE NOTION'])).length
+  const contrat = rows.filter(r => is(r.CONTRAT)).length
+  const reporting = rows.filter(r => is(r['REPORTINGS 2025'])).length
+  const coprod = rows.filter(r => is(r['COPROD/COPIL'])).length
+  const costrat = rows.filter(r => is(r.COSTRAT)).length
+  const archivage = rows.filter(r => is(r.CONTRAT) && is(r['REPORTINGS 2025']) && is(r['COPROD/COPIL']) && is(r.COSTRAT)).length
+  return {
+    total,
+    bcPct: Math.round((bc / total) * 100),
+    notionPct: Math.round((notion / total) * 100),
+    archivagePct: Math.round((archivage / total) * 100),
+    contratPct: Math.round((contrat / total) * 100),
+    reportingPct: Math.round((reporting / total) * 100),
+    coprodPct: Math.round((coprod / total) * 100),
+    costratPct: Math.round((costrat / total) * 100),
+  }
+}
+
 // Auto-refresh interval (30 seconds)
 const REFRESH_INTERVAL = 30000
 
@@ -57,6 +88,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null)
   const [lastUpdated, setLastUpdated] = useState<string>('')
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [copied, setCopied] = useState(false)
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('')
@@ -194,6 +226,25 @@ export default function DashboardPage() {
     { name: 'Costrat', value: kpis.costratPct, fill: COLORS.warning },
   ], [kpis])
 
+  // Per-country KPIs (always computed from ALL data, not filtered)
+  const countryMetrics = useMemo(() => {
+    return COUNTRY_CONFIG.map(cfg => {
+      const rows = data.filter(r => (r.COUNTRY || '').trim().toLowerCase().includes(cfg.key.toLowerCase()))
+      return { ...cfg, kpis: computeCountryKpis(rows) }
+    })
+  }, [data])
+
+  // Country comparison bar chart data
+  const countryCompareData = useMemo(() => {
+    return countryMetrics.map(c => ({
+      name: c.flag + ' ' + c.key,
+      'Business Case': c.kpis.bcPct,
+      'Notion': c.kpis.notionPct,
+      'Archivage': c.kpis.archivagePct,
+      'Contrat': c.kpis.contratPct,
+    }))
+  }, [countryMetrics])
+
   // Badge helper
   const getBadgeClass = (val: string) => {
     const v = (val || '').trim().toLowerCase()
@@ -213,6 +264,144 @@ export default function DashboardPage() {
       })
     } catch (_e) { return iso }
   }
+
+  // Copy email report
+  const copyEmailReport = useCallback(async () => {
+    const today = new Date().toLocaleDateString('fr-FR', { day: '2-digit', month: 'long', year: 'numeric' })
+    const isComp = (val: string) => val?.trim().toLowerCase() === 'complet'
+
+    // Build missing items per country
+    const countryDetails = COUNTRY_CONFIG.map(cfg => {
+      const rows = data.filter(r => (r.COUNTRY || '').trim().toLowerCase().includes(cfg.key.toLowerCase()))
+      const ck = computeCountryKpis(rows)
+      const missing = rows.filter(r => !isComp(r['Business Case']) || !isComp(r['UPDATE NOTION']) || !isComp(r.CONTRAT) || !isComp(r['REPORTINGS 2025']) || !isComp(r['COPROD/COPIL']) || !isComp(r.COSTRAT))
+      return { ...cfg, kpis: ck, rows, missing }
+    })
+
+    // Build the bar helper
+    const bar = (pct: number, color: string) =>
+      `<div style="background:#e5e7eb;border-radius:4px;height:8px;width:100%;margin-top:2px;"><div style="background:${color};height:8px;border-radius:4px;width:${pct}%;"></div></div>`
+
+    // Global summary
+    const totalAll = data.length
+    const bcAll = data.filter(r => isComp(r['Business Case'])).length
+    const notAll = data.filter(r => isComp(r['UPDATE NOTION'])).length
+    const archAll = data.filter(r => isComp(r.CONTRAT) && isComp(r['REPORTINGS 2025']) && isComp(r['COPROD/COPIL']) && isComp(r.COSTRAT)).length
+
+    let html = `
+<div style="font-family:'Segoe UI',Arial,sans-serif;max-width:720px;margin:0 auto;background:#ffffff;color:#1a1a1a;padding:32px;">
+  <h1 style="margin:0 0 4px;font-size:22px;color:#1a1a1a;">📊 BC Follow-Up — Rapport du ${today}</h1>
+  <p style="margin:0 0 24px;font-size:13px;color:#6b7280;">Généré automatiquement depuis le tableau de suivi</p>
+
+  <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
+    <tr>
+      <td style="padding:12px 16px;background:#f0f4ff;border-radius:8px;text-align:center;">
+        <div style="font-size:28px;font-weight:800;color:#4f46e5;">${totalAll}</div>
+        <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;">Total Clients</div>
+      </td>
+      <td style="width:12px;"></td>
+      <td style="padding:12px 16px;background:#ecfdf5;border-radius:8px;text-align:center;">
+        <div style="font-size:28px;font-weight:800;color:#059669;">${totalAll ? Math.round((bcAll/totalAll)*100) : 0}%</div>
+        <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;">Business Case</div>
+      </td>
+      <td style="width:12px;"></td>
+      <td style="padding:12px 16px;background:#faf5ff;border-radius:8px;text-align:center;">
+        <div style="font-size:28px;font-weight:800;color:#7c3aed;">${totalAll ? Math.round((notAll/totalAll)*100) : 0}%</div>
+        <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;">Update Notion</div>
+      </td>
+      <td style="width:12px;"></td>
+      <td style="padding:12px 16px;background:#eff6ff;border-radius:8px;text-align:center;">
+        <div style="font-size:28px;font-weight:800;color:#2563eb;">${totalAll ? Math.round((archAll/totalAll)*100) : 0}%</div>
+        <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:0.5px;">Archivage</div>
+      </td>
+    </tr>
+  </table>
+
+  <h2 style="font-size:16px;margin:0 0 16px;color:#1a1a1a;border-bottom:2px solid #e5e7eb;padding-bottom:8px;">Détail par Pays</h2>
+`
+
+    countryDetails.forEach(c => {
+      html += `
+  <table style="width:100%;border-collapse:collapse;margin-bottom:20px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+    <tr>
+      <td colspan="3" style="padding:10px 16px;background:${c.gradient};color:#fff;font-weight:700;font-size:15px;">
+        ${c.flag} ${c.key} — <span style="font-weight:400;font-size:13px;">${c.kpis.total} clients</span>
+      </td>
+    </tr>
+    <tr style="background:#f9fafb;">
+      <td style="padding:8px 16px;font-size:12px;color:#374151;width:40%;">Business Case</td>
+      <td style="padding:8px 12px;font-size:13px;font-weight:700;color:#059669;width:15%;text-align:right;">${c.kpis.bcPct}%</td>
+      <td style="padding:8px 16px;width:45%;">${bar(c.kpis.bcPct, '#10b981')}</td>
+    </tr>
+    <tr>
+      <td style="padding:8px 16px;font-size:12px;color:#374151;">Update Notion</td>
+      <td style="padding:8px 12px;font-size:13px;font-weight:700;color:#7c3aed;text-align:right;">${c.kpis.notionPct}%</td>
+      <td style="padding:8px 16px;">${bar(c.kpis.notionPct, '#a855f7')}</td>
+    </tr>
+    <tr style="background:#f9fafb;">
+      <td style="padding:8px 16px;font-size:12px;color:#374151;">Archivage</td>
+      <td style="padding:8px 12px;font-size:13px;font-weight:700;color:#4f46e5;text-align:right;">${c.kpis.archivagePct}%</td>
+      <td style="padding:8px 16px;">${bar(c.kpis.archivagePct, '#6366f1')}</td>
+    </tr>
+    <tr>
+      <td style="padding:8px 16px;font-size:12px;color:#374151;">Contrat</td>
+      <td style="padding:8px 12px;font-size:13px;font-weight:700;color:#2563eb;text-align:right;">${c.kpis.contratPct}%</td>
+      <td style="padding:8px 16px;">${bar(c.kpis.contratPct, '#3b82f6')}</td>
+    </tr>
+    <tr style="background:#f9fafb;">
+      <td style="padding:8px 16px;font-size:12px;color:#374151;">Reportings 2025</td>
+      <td style="padding:8px 12px;font-size:13px;font-weight:700;color:#0891b2;text-align:right;">${c.kpis.reportingPct}%</td>
+      <td style="padding:8px 16px;">${bar(c.kpis.reportingPct, '#06b6d4')}</td>
+    </tr>
+    <tr>
+      <td style="padding:8px 16px;font-size:12px;color:#374151;">Costrat</td>
+      <td style="padding:8px 12px;font-size:13px;font-weight:700;color:#d97706;text-align:right;">${c.kpis.costratPct}%</td>
+      <td style="padding:8px 16px;">${bar(c.kpis.costratPct, '#f59e0b')}</td>
+    </tr>
+  </table>
+`
+    })
+
+    // Actions needed section
+    html += `
+  <h2 style="font-size:16px;margin:24px 0 12px;color:#dc2626;border-bottom:2px solid #fecaca;padding-bottom:8px;">⚠️ Actions requises</h2>
+`
+    countryDetails.forEach(c => {
+      if (c.missing.length === 0) return
+      html += `<p style="font-size:13px;font-weight:700;color:#1a1a1a;margin:12px 0 6px;">${c.flag} ${c.key} — ${c.missing.length} client(s) incomplet(s)</p>`
+      html += `<table style="width:100%;border-collapse:collapse;font-size:11px;margin-bottom:8px;">`
+      html += `<tr style="background:#fef2f2;"><th style="padding:6px 10px;text-align:left;color:#991b1b;border-bottom:1px solid #fecaca;">Client</th><th style="padding:6px 10px;text-align:center;color:#991b1b;border-bottom:1px solid #fecaca;">BC</th><th style="padding:6px 10px;text-align:center;color:#991b1b;border-bottom:1px solid #fecaca;">Notion</th><th style="padding:6px 10px;text-align:center;color:#991b1b;border-bottom:1px solid #fecaca;">Contrat</th><th style="padding:6px 10px;text-align:center;color:#991b1b;border-bottom:1px solid #fecaca;">Report.</th><th style="padding:6px 10px;text-align:center;color:#991b1b;border-bottom:1px solid #fecaca;">Coprod</th><th style="padding:6px 10px;text-align:center;color:#991b1b;border-bottom:1px solid #fecaca;">Costrat</th></tr>`
+      c.missing.slice(0, 15).forEach(r => {
+        const icon = (v: string) => isComp(v) ? '✅' : '❌'
+        html += `<tr><td style="padding:4px 10px;border-bottom:1px solid #f3f4f6;font-weight:600;">${r.CLIENT || '—'}</td><td style="padding:4px 10px;text-align:center;border-bottom:1px solid #f3f4f6;">${icon(r['Business Case'])}</td><td style="padding:4px 10px;text-align:center;border-bottom:1px solid #f3f4f6;">${icon(r['UPDATE NOTION'])}</td><td style="padding:4px 10px;text-align:center;border-bottom:1px solid #f3f4f6;">${icon(r.CONTRAT)}</td><td style="padding:4px 10px;text-align:center;border-bottom:1px solid #f3f4f6;">${icon(r['REPORTINGS 2025'])}</td><td style="padding:4px 10px;text-align:center;border-bottom:1px solid #f3f4f6;">${icon(r['COPROD/COPIL'])}</td><td style="padding:4px 10px;text-align:center;border-bottom:1px solid #f3f4f6;">${icon(r.COSTRAT)}</td></tr>`
+      })
+      if (c.missing.length > 15) {
+        html += `<tr><td colspan="7" style="padding:6px 10px;color:#6b7280;font-style:italic;">... et ${c.missing.length - 15} autre(s)</td></tr>`
+      }
+      html += `</table>`
+    })
+
+    html += `
+  <p style="margin-top:24px;font-size:11px;color:#9ca3af;text-align:center;">Rapport généré le ${today} depuis BC Follow-Up Dashboard</p>
+</div>`
+
+    // Copy as rich text HTML
+    try {
+      const blob = new Blob([html], { type: 'text/html' })
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'text/html': blob, 'text/plain': new Blob([`BC Follow-Up Rapport — ${today}`], { type: 'text/plain' }) })
+      ])
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    } catch (_e) {
+      // Fallback: copy as plain text
+      const plain = `BC Follow-Up Rapport — ${today}\n\nTotal: ${totalAll} clients\nBC: ${totalAll ? Math.round((bcAll/totalAll)*100) : 0}% | Notion: ${totalAll ? Math.round((notAll/totalAll)*100) : 0}% | Archivage: ${totalAll ? Math.round((archAll/totalAll)*100) : 0}%\n\n` +
+        countryDetails.map(c => `${c.flag} ${c.key}: ${c.kpis.total} clients — BC ${c.kpis.bcPct}%, Notion ${c.kpis.notionPct}%, Archivage ${c.kpis.archivagePct}%`).join('\n')
+      await navigator.clipboard.writeText(plain)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2500)
+    }
+  }, [data])
 
   // Custom tooltip
   const CustomTooltip = (props: any) => {
@@ -271,6 +460,13 @@ export default function DashboardPage() {
             </svg>
             Actualiser
           </button>
+          <button className="copy-email-btn" onClick={copyEmailReport}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+            {copied ? '✅ Copié !' : '📧 Copier Rapport'}
+          </button>
           {lastUpdated && (
             <span className="last-updated">
               Mis à jour : {formatDate(lastUpdated)}
@@ -325,8 +521,100 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Country Breakdown Section */}
+      <h2 className="section-title animate-in delay-2">Métriques par Pays</h2>
+      <div className="country-grid animate-in delay-2">
+        {countryMetrics.map(c => (
+          <div key={c.key} className="country-card">
+            <div className="country-card-header" style={{ background: c.gradient }}>
+              <span className="country-flag">{c.flag}</span>
+              <div>
+                <h3 className="country-name">{c.key}</h3>
+                <p className="country-count">{c.kpis.total} clients</p>
+              </div>
+            </div>
+            <div className="country-card-body">
+              <div className="country-metric">
+                <div className="country-metric-header">
+                  <span>Business Case</span>
+                  <span className="country-metric-value">{c.kpis.bcPct}%</span>
+                </div>
+                <div className="progress-bar"><div className="progress-fill" style={{ width: `${c.kpis.bcPct}%`, background: COLORS.success }} /></div>
+              </div>
+              <div className="country-metric">
+                <div className="country-metric-header">
+                  <span>Update Notion</span>
+                  <span className="country-metric-value">{c.kpis.notionPct}%</span>
+                </div>
+                <div className="progress-bar"><div className="progress-fill" style={{ width: `${c.kpis.notionPct}%`, background: COLORS.purple }} /></div>
+              </div>
+              <div className="country-metric">
+                <div className="country-metric-header">
+                  <span>Archivage</span>
+                  <span className="country-metric-value">{c.kpis.archivagePct}%</span>
+                </div>
+                <div className="progress-bar"><div className="progress-fill" style={{ width: `${c.kpis.archivagePct}%`, background: COLORS.accent }} /></div>
+              </div>
+              <div className="country-metric">
+                <div className="country-metric-header">
+                  <span>Contrat</span>
+                  <span className="country-metric-value">{c.kpis.contratPct}%</span>
+                </div>
+                <div className="progress-bar"><div className="progress-fill" style={{ width: `${c.kpis.contratPct}%`, background: COLORS.info }} /></div>
+              </div>
+              <div className="country-metric">
+                <div className="country-metric-header">
+                  <span>Reportings</span>
+                  <span className="country-metric-value">{c.kpis.reportingPct}%</span>
+                </div>
+                <div className="progress-bar"><div className="progress-fill" style={{ width: `${c.kpis.reportingPct}%`, background: COLORS.cyan }} /></div>
+              </div>
+              <div className="country-metric">
+                <div className="country-metric-header">
+                  <span>Costrat</span>
+                  <span className="country-metric-value">{c.kpis.costratPct}%</span>
+                </div>
+                <div className="progress-bar"><div className="progress-fill" style={{ width: `${c.kpis.costratPct}%`, background: COLORS.warning }} /></div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Country Comparison Chart */}
+      <div className="charts-grid animate-in delay-2" style={{ marginBottom: 'var(--space-2xl)' }}>
+        <div className="chart-card" style={{ gridColumn: '1 / -1' }}>
+          <h3>Comparaison par Pays — Taux de complétion (%)</h3>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={countryCompareData} margin={{ bottom: 10 }}>
+              <XAxis dataKey="name" stroke="#64748b" fontSize={12} />
+              <YAxis stroke="#64748b" fontSize={11} domain={[0, 100]} />
+              <Tooltip
+                contentStyle={{
+                  background: '#1a2236',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px',
+                  fontSize: '0.75rem',
+                  color: '#f1f5f9'
+                }}
+                formatter={(value: any) => [`${value}%`]}
+              />
+              <Legend
+                formatter={(value: any) => (
+                  <span style={{ color: '#94a3b8', fontSize: '0.7rem' }}>{value}</span>
+                )}
+              />
+              <Bar dataKey="Business Case" fill={COLORS.success} radius={[4, 4, 0, 0]} barSize={20} />
+              <Bar dataKey="Notion" fill={COLORS.purple} radius={[4, 4, 0, 0]} barSize={20} />
+              <Bar dataKey="Archivage" fill={COLORS.accent} radius={[4, 4, 0, 0]} barSize={20} />
+              <Bar dataKey="Contrat" fill={COLORS.info} radius={[4, 4, 0, 0]} barSize={20} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
       {/* Charts Row 1: Gauges + Status Breakdown */}
-      <h2 className="section-title animate-in delay-2">Indicateurs de Complétion</h2>
+      <h2 className="section-title animate-in delay-2">Indicateurs de Complétion Globaux</h2>
       <div className="charts-grid animate-in delay-2">
         {/* Radial gauge chart */}
         <div className="chart-card">
