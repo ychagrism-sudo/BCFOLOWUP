@@ -290,7 +290,7 @@ export default function DashboardPage() {
 
     let html = `
 <div style="font-family:'Segoe UI',Arial,sans-serif;max-width:720px;margin:0 auto;background:#ffffff;color:#1a1a1a;padding:32px;">
-  <h1 style="margin:0 0 4px;font-size:22px;color:#1a1a1a;">📊 BC Follow-Up — Rapport du ${today}</h1>
+  <h1 style="margin:0 0 4px;font-size:22px;color:#1a1a1a;">📊 Follow-Up DRC — Rapport du ${today}</h1>
   <p style="margin:0 0 24px;font-size:13px;color:#6b7280;">Généré automatiquement depuis le tableau de suivi</p>
 
   <table style="width:100%;border-collapse:collapse;margin-bottom:24px;">
