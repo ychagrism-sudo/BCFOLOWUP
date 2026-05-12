@@ -382,14 +382,14 @@ export default function DashboardPage() {
     })
 
     html += `
-  <p style="margin-top:24px;font-size:11px;color:#9ca3af;text-align:center;">Rapport généré le ${today} depuis BC Follow-Up Dashboard</p>
+  <p style="margin-top:24px;font-size:11px;color:#9ca3af;text-align:center;">Rapport généré le ${today} depuis Follow-Up DRC Dashboard</p>
 </div>`
 
     // Copy as rich text HTML
     try {
       const blob = new Blob([html], { type: 'text/html' })
       await navigator.clipboard.write([
-        new ClipboardItem({ 'text/html': blob, 'text/plain': new Blob([`BC Follow-Up Rapport — ${today}`], { type: 'text/plain' }) })
+        new ClipboardItem({ 'text/html': blob, 'text/plain': new Blob([`Follow-Up DRC Rapport — ${today}`], { type: 'text/plain' }) })
       ])
       setCopied(true)
       setTimeout(() => setCopied(false), 2500)
@@ -447,8 +447,8 @@ export default function DashboardPage() {
         <div className="header-left">
           <img src="/Outsourcia Full.svg" alt="Outsourcia" className="header-logo" />
           <div>
-            <h1>BC Follow-Up Dashboard</h1>
-            <p>Suivi opérationnel des Business Cases</p>
+            <h1> Follow-Up DRC Dashboard</h1>
+            <p>Suivi opérationnel DRC</p>
           </div>
         </div>
         <div className="header-right">
@@ -821,7 +821,7 @@ export default function DashboardPage() {
         fontSize: '0.65rem',
         letterSpacing: '0.02em'
       }}>
-        BC Follow-Up Dashboard · Actualisation auto. 30s · Source: Google Sheets
+        Follow-Up DRC Dashboard · Actualisation auto. 30s · Source: Google Sheets
       </footer>
     </div>
   )
